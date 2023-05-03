@@ -90,7 +90,8 @@ class Transformer(nn.Module):
         ## Decoder
         all_role_tokens = role_token_embed.unsqueeze(1).repeat(1, bs, 1)
         role_tgt = torch.zeros_like(all_role_tokens)
-        extracted_rhs = self.gaze_s1_dec(all_role_tokens, self.ln1(flattend_src), memory_key_padding_mask=mask, pos=pos_embed, query_pos=role_tgt)
+        #extracted_rhs = self.gaze_s1_dec(all_role_tokens, self.ln1(flattend_src), memory_key_padding_mask=mask, pos=pos_embed, query_pos=role_tgt)
+        extracted_rhs = self.gaze_s1_dec(all_role_tokens, self.ln1(aggregated_src), memory_key_padding_mask=mask, pos=pos_embed, query_pos=role_tgt)
         extracted_rhs = extracted_rhs.transpose(1, 2)
         ## Encoder
         NUM_ALL_ROLES = 190
