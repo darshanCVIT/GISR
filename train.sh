@@ -4,11 +4,11 @@
 #SBATCH --gres=gpu:4
 #SBATCH -w gnode048
 #SBATCH --mem-per-cpu=2048
-#SBATCH --mail-user darshana.s@research.iiit.ac.in
+#SBATCH --mail-user darshan.singh@research.iiit.ac.in
 #SBATCH --time=4-00:00:00
 #SBATCH --mail-type=ALL
 
-cd /ssd_scratch/cvit/darshana.s/tdl
+cd /ssd_scratch/cvit/darshan.singh/tdl
 
 echo "starting script"
 python -m torch.distributed.launch --nproc_per_node=4 --use_env ~/CoFormer/main.py \
