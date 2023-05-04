@@ -252,9 +252,17 @@ class CSVDataset(Dataset):
 
 def collater(data):
     imgs = [s['img'] for s in data]
-    object_features = torch.cat([torch.tensor(s['object_features']).unsqueeze(0).float() for s in data], dim=0) # B X 20 X 2048
+    object_features = torch.cat([s['object_features'].unsqueeze(0).float() for s in data], dim=0) # B X 20 X 2048
     object_img_size = torch.cat([torch.tensor(s['object_img_size']).unsqueeze(0).float() for s in data], dim=0) # B X 2
-    object_boxes = torch.cat([torch.tensor(s['object_boxes'].unsqueeze(0)).float() for s in data], dim=0) # B X 20 X 4
+    object_boxes = torch.cat([s['object_boxes'].unsqueeze(0).float() for s in data], dim=0) # B X 20 X 4
+    
+    # object_features = torch.cat([torch.tensor(s['object_features']).unsqueeze(0).float() for s in data], dim=0) # B X 20 X 2048
+    # object_img_size = torch.cat([torch.tensor(s['object_img_size']).unsqueeze(0).float() for s in data], dim=0) # B X 2
+    # object_boxes = torch.cat([torch.tensor(s['object_boxes'].unsqueeze(0)).float() for s in data], dim=0) # B X 20 X 4
+
+    
+    
+    
     annots = [torch.from_numpy(s['annot']) for s in data]
     shift_0 = [0 for s in data]
     shift_1 = [0 for s in data]

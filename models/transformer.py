@@ -85,10 +85,10 @@ class Transformer(nn.Module):
         # B X 20 X 2048 -> B X 20 X 512 -> 20 X B X 512
         bs, hw = object_features.size(0), object_features.size(1)
         proj_object_features = self.object_features_proj(object_features).permute(1, 0, 2)
-        print("*" * 65)
-        print(object_features.shape, proj_object_features.shape)
+        # print("*" * 65)
+        # print(object_features.shape, proj_object_features.shape)
         proj_object_pos_embed = self.obj_spatial_pos_emd(object_pos_embed).permute(1, 0, 2)
-        print(object_pos_embed.shape, proj_object_pos_embed.shape)
+        # print(object_pos_embed.shape, proj_object_pos_embed.shape)
 
         # Glance Transformer 
         ## Encoder
