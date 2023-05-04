@@ -22,7 +22,7 @@ from .transformer import build_transformer
 
 class CoFormer(nn.Module):
     """CoFormer model for Grounded Situation Recognition"""
-    def __init__(self, backbone, transformer, num_noun_classes, vidx_ridx):
+    def __init__(self, transformer, num_noun_classes, vidx_ridx):
         """ Initialize the model.
         Parameters:
             - backbone: torch module of the backbone to be used. See backbone.py
@@ -31,7 +31,7 @@ class CoFormer(nn.Module):
             - vidx_ridx: verb index to role index
         """
         super().__init__()
-        self.backbone = backbone
+        #self.backbone = backbone
         self.transformer = transformer
         self.num_noun_classes = num_noun_classes
         self.vidx_ridx = vidx_ridx
@@ -48,7 +48,7 @@ class CoFormer(nn.Module):
         self.RL_token_embed = nn.Embedding(1, hidden_dim)
 
         # 1x1 Conv
-        self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)
+        #self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)
         
         # classifiers & predictors (for grounded noun prediction)
         self.noun_1_classifier = nn.Linear(hidden_dim, self.num_noun_classes)
@@ -74,7 +74,7 @@ class CoFormer(nn.Module):
         self.ln2 = nn.LayerNorm(hidden_dim)
 
 
-    def forward(self, samples, clip_embs, targets=None, inference=False):
+    def forward(self, object_features, object_boxes, object_img_size, clip_embs, targets=None, inference=False):
         """ 
         Parameters:
                - samples: The forward expects a NestedTensor, which consists of:
@@ -85,26 +85,38 @@ class CoFormer(nn.Module):
                - out: dict of tensors. 'pred_verb', 'pred_noun', 'pred_bbox' and 'pred_bbox_conf' are keys
         """
         MAX_NUM_ROLES = 6
-        if isinstance(samples, (list, torch.Tensor)):
-            samples = nested_tensor_from_tensor_list(samples)
-        features, pos = self.backbone(samples)
-        src, mask = features[-1].decompose()
-        assert mask is not None
+        # if isinstance(samples, (list, torch.Tensor)):
+        #     samples = nested_tensor_from_tensor_list(samples)
+        #features, pos = self.backbone(samples)
 
-        batch_size = src.shape[0]
+        # src, mask = features[-1].decompose()
+        # assert mask is not None
+
+        #img_size_batch = object_img_size #Bx2pickle
+        obj_bb_pos = object_boxes.clone()
+        for i, img_size in enumerate(object_img_size):
+            img_h = img_size[0]
+            img_w = img_size[1]
+            obj_bb_pos[i,:,0] = obj_bb_pos[i,:,0]/img_w
+            obj_bb_pos[i,:,1] = obj_bb_pos[i,:,1]/img_h
+            obj_bb_pos[i,:,2] = obj_bb_pos[i,:,2]/img_w
+            obj_bb_pos[i,:,3] = obj_bb_pos[i,:,3]/img_h
+
+
+        batch_size = object_features.shape[0]
         batch_verb, batch_noun_1, batch_noun_2, batch_noun_3, batch_bbox, batch_bbox_conf = [], [], [], [], [], []
         # model prediction
         for i in range(batch_size):
             if not inference:
-                outs = self.transformer(self.input_proj(src[i:i+1]), 
-                                        mask[i:i+1], self.IL_token_embed.weight, self.RL_token_embed.weight,
+                outs = self.transformer(object_features[i:i+1],  
+                                        self.IL_token_embed.weight, self.RL_token_embed.weight,
                                         self.verb_token_embed.weight, self.role_token_embed.weight, 
-                                        pos[-1][i:i+1], self.vidx_ridx, clip_embs[i:i+1], targets=targets[i], inference=inference)
+                                        obj_bb_pos[i:i+1], self.vidx_ridx, clip_embs[i:i+1], targets=targets[i], inference=inference)
             else:
-                outs = self.transformer(self.input_proj(src[i:i+1]), 
-                                       mask[i:i+1], self.IL_token_embed.weight, self.RL_token_embed.weight,
+                outs = self.transformer(object_features[i:i+1],  
+                                       self.IL_token_embed.weight, self.RL_token_embed.weight,
                                        self.verb_token_embed.weight, self.role_token_embed.weight, 
-                                       pos[-1][i:i+1], self.vidx_ridx, clip_embs[i:1+1], inference=inference)
+                                       obj_bb_pos[i:i+1], self.vidx_ridx, clip_embs[i:1+1], inference=inference)
   
             # output features & predictions
             verb_pred, extracted_rhs, aggregated_rhs, final_rhs, selected_roles = outs[0], outs[1], outs[2], outs[3], outs[4]
@@ -376,10 +388,10 @@ class SWiGCriterion(nn.Module):
 
 
 def build(args):
-    backbone = build_backbone(args)
+    #backbone = build_backbone(args)
     transformer = build_transformer(args)
 
-    model = CoFormer(backbone,
+    model = CoFormer(#backbone,
                      transformer,
                      num_noun_classes=args.num_noun_classes,
                      vidx_ridx=args.vidx_ridx)

@@ -27,14 +27,17 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
 
-    for samples, clip_embs, targets in metric_logger.log_every(data_loader, print_freq, header):
+    for object_features, object_boxes, object_img_size, clip_embs, targets in metric_logger.log_every(data_loader, print_freq, header):
         # data & target
-        samples = samples.to(device)
+        #samples = samples.to(device)
+        object_features = object_features.to(device)
+        object_boxes = object_boxes.to(device)
+        object_img_size = object_img_size.to(device)
         targets = [{k: v.to(device) if type(v) is not str else v for k, v in t.items()} for t in targets]
         clip_embs = clip_embs.to(device)
 
         # model output & calculate loss
-        outputs = model(samples, clip_embs, targets)
+        outputs = model(object_features, object_boxes, object_img_size, clip_embs, targets)
         loss_dict = criterion(outputs, targets)
         weight_dict = criterion.weight_dict
         losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
@@ -79,14 +82,17 @@ def evaluate_swig(model, criterion, data_loader, device, output_dir):
     header = 'Test:'
     print_freq = 10
 
-    for samples, clip_embs, targets in metric_logger.log_every(data_loader, print_freq, header):
+    for object_features, object_boxes, object_img_size, clip_embs, targets in metric_logger.log_every(data_loader, print_freq, header):
         # data & target
-        samples = samples.to(device)
+        #samples = samples.to(device)
+        object_features = object_features.to(device)
+        object_boxes = object_boxes.to(device)
+        object_img_size = object_img_size.to(device)
         targets = [{k: v.to(device) if type(v) is not str else v for k, v in t.items()} for t in targets]
         clip_embs = clip_embs.to(device)
 
         # model output & calculate loss
-        outputs = model(samples, clip_embs, targets)
+        outputs = model(object_features, object_boxes, object_img_size, clip_embs, targets)
         loss_dict = criterion(outputs, targets, eval=True)
         weight_dict = criterion.weight_dict
 

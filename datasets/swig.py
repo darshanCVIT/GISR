@@ -23,6 +23,7 @@ import skimage
 import json
 import cv2
 import util
+import pickle
 from PIL import Image
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
@@ -126,6 +127,7 @@ class CSVDataset(Dataset):
     def __getitem__(self, idx):
         img = self.load_image(idx)
         clip = self.load_clip(idx)
+        object_features = self.load_object_features(idx)
         annot = self.load_annotations(idx)
         verb = self.image_names[idx].split('/')[2]
         verb = verb.split('_')[0]
@@ -133,9 +135,10 @@ class CSVDataset(Dataset):
         verb_idx = self.verb_to_idx[verb]
         verb_role = self.verb_info[verb]['order']
         verb_role_idx = [self.role_to_idx[role] for role in verb_role]
-        sample = {'img': img, 'clip': clip, 'annot': annot, 'img_name': self.image_names[idx], 'verb_idx': verb_idx, 'verb_role_idx': verb_role_idx}
-        if self.transform:
-            sample = self.transform(sample)
+        sample = {'img':img, 'clip': clip, 'object_features': object_features['features'], 'object_boxes': object_features['boxes'], 'object_img_size': object_features['img_size'], 
+                  'annot': annot, 'img_name': self.image_names[idx], 'verb_idx': verb_idx, 'verb_role_idx': verb_role_idx}
+        # if self.transform:
+        #     sample = self.transform(sample)
         return sample
 
 
@@ -155,6 +158,19 @@ class CSVDataset(Dataset):
         clip_folder = 'clip_features_ViT_L14_336px'
         img_file = f"{clip_folder}/"+self.image_names[image_index][len(self.img_folder):-3]+'npy'
         return np.load(img_file)
+    
+    def load_object_features(self, image_index):
+        object_features_folder = 'object_features_36'
+        img_file = f"{object_features_folder}/"+self.image_names[image_index][len(self.img_folder):-3]+'pkl'
+        pkl_d = pickle.load(open(img_file, 'rb'))
+        # pkl_d = {
+        #     'features': torch.randn(36,2048),
+        #     'boxes': torch.randn(36,4),
+        #     'img_size': (256, 933)
+        # }
+
+        return pkl_d
+        
 
 
     def load_annotations(self, image_index):
@@ -236,10 +252,13 @@ class CSVDataset(Dataset):
 
 def collater(data):
     imgs = [s['img'] for s in data]
-    annots = [s['annot'] for s in data]
-    shift_0 = [s['shift_0'] for s in data]
-    shift_1 = [s['shift_1'] for s in data]
-    scales = [s['scale'] for s in data]
+    object_features = torch.cat([torch.tensor(s['object_features']).unsqueeze(0).float() for s in data], dim=0) # B X 20 X 2048
+    object_img_size = torch.cat([torch.tensor(s['object_img_size']).unsqueeze(0).float() for s in data], dim=0) # B X 2
+    object_boxes = torch.cat([torch.tensor(s['object_boxes'].unsqueeze(0)).float() for s in data], dim=0) # B X 20 X 4
+    annots = [torch.from_numpy(s['annot']) for s in data]
+    shift_0 = [0 for s in data]
+    shift_1 = [0 for s in data]
+    scales = [1 for s in data]
     img_names = [s['img_name'] for s in data]
     verb_indices = [s['verb_idx'] for s in data]
     verb_indices = torch.tensor(verb_indices)
@@ -254,15 +273,15 @@ def collater(data):
     heights = [int(s.shape[0]) for s in imgs]
     widths = [int(s.shape[1]) for s in imgs]
 
-    batch_size = len(imgs)
+    batch_size = len(object_features)
     max_height = 700
     max_width = 700
 
-    padded_imgs = torch.zeros(batch_size, max_height, max_width, 3)
-    for i in range(batch_size):
-        img = imgs[i]
-        padded_imgs[i, shift_0[i]:shift_0[i]+img.shape[0], shift_1[i]:shift_1[i]+img.shape[1], :] = img
-    padded_imgs = padded_imgs.permute(0, 3, 1, 2)
+    # padded_imgs = torch.zeros(batch_size, max_height, max_width, 3)
+    # for i in range(batch_size):
+    #     img = imgs[i]
+    #     padded_imgs[i, shift_0[i]:shift_0[i]+img.shape[0], shift_1[i]:shift_1[i]+img.shape[1], :] = img
+    # padded_imgs = padded_imgs.permute(0, 3, 1, 2)
 
     max_num_annots = max(annot.shape[0] for annot in annots)
     if max_num_annots > 0:
@@ -281,7 +300,10 @@ def collater(data):
     mw = torch.tensor(max_width).float()
     mh = torch.tensor(max_height).float()
 
-    return (util.misc.nested_tensor_from_tensor_list(padded_imgs),
+    return (#util.misc.nested_tensor_from_tensor_list(padded_imgs),
+            object_features,
+            object_boxes,
+            object_img_size,
             clip_embs,
             [{'verbs': vi,
               'roles': vri,
@@ -424,7 +446,7 @@ def build(image_set, args):
                          role_path=role_path,
                          verb_info=verb_orders,
                          is_training=is_training,
-                         transform=tfs)
+                         transform=None)
 
     if is_training:
         args.SWiG_json_train = dataset.SWiG_json

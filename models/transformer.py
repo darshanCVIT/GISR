@@ -50,6 +50,11 @@ class Transformer(nn.Module):
         self.d_clip = 768
         self.project_clip = nn.Linear(self.d_clip, d_model)
 
+        #Object features
+        self.object_features_proj = nn.Linear(2048, d_model)
+        self.obj_spatial_pos_emd = nn.Linear(4, d_model)
+
+
         self.verb_classifier_clip = nn.Sequential(nn.Linear(d_model*3, d_model*3),
                                              nn.ReLU(),
                                              nn.Dropout(0.3),
@@ -69,29 +74,37 @@ class Transformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, src, mask, IL_token_embed, RL_token_embed, verb_token_embed, role_token_embed, pos_embed, vidx_ridx, clip_embs, targets=None, inference=False):
+    def forward(self, object_features, IL_token_embed, RL_token_embed, verb_token_embed, role_token_embed, object_pos_embed, vidx_ridx, clip_embs, targets=None, inference=False):
         device = IL_token_embed.device
         # flatten NxCxHxW to HWxNxC
-        bs, c, h, w = src.shape
-        flattend_src = src.flatten(2).permute(2, 0, 1)
-        pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
-        mask = mask.flatten(1)
+        # bs, c, h, w = src.shape
+        # flattend_src = src.flatten(2).permute(2, 0, 1)
+        # pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
+        # mask = mask.flatten(1)
+
+        # B X 20 X 2048 -> B X 20 X 512 -> 20 X B X 512
+        bs, hw = object_features.size(0), object_features.size(1)
+        proj_object_features = self.object_features_proj(object_features).permute(1, 0, 2)
+        print("*" * 65)
+        print(object_features.shape, proj_object_features.shape)
+        proj_object_pos_embed = self.obj_spatial_pos_emd(object_pos_embed).permute(1, 0, 2)
+        print(object_pos_embed.shape, proj_object_pos_embed.shape)
 
         # Glance Transformer 
         ## Encoder
         IL_token = IL_token_embed.unsqueeze(1).repeat(1, bs, 1)
-        glance_enc_zero_mask = torch.zeros((bs, 1), dtype=torch.bool, device=device)
-        mem_mask = torch.cat([glance_enc_zero_mask, mask], dim=1)
-        IL_token_flattend_src = torch.cat([IL_token, flattend_src], dim=0)
-        glance_enc_memory = self.glance_enc(IL_token_flattend_src, src_key_padding_mask=mem_mask, pos=pos_embed, num_zeros=1)
-        IL_token_feature, aggregated_src = glance_enc_memory.split([1, h*w], dim=0) 
+        # glance_enc_zero_mask = torch.zeros((bs, 1), dtype=torch.bool, device=device)
+        # mem_mask = torch.cat([glance_enc_zero_mask, mask], dim=1)
+        IL_token_flattend_src = torch.cat([IL_token, proj_object_features], dim=0)
+        glance_enc_memory = self.glance_enc(IL_token_flattend_src, src_key_padding_mask=None, pos=proj_object_pos_embed, num_zeros=1)
+        IL_token_feature, aggregated_src = glance_enc_memory.split([1, hw], dim=0) 
 
         # Gaze-Step1 Transformer 
         ## Decoder
         all_role_tokens = role_token_embed.unsqueeze(1).repeat(1, bs, 1)
         role_tgt = torch.zeros_like(all_role_tokens)
-        #extracted_rhs = self.gaze_s1_dec(all_role_tokens, self.ln1(flattend_src), memory_key_padding_mask=mask, pos=pos_embed, query_pos=role_tgt)
-        extracted_rhs = self.gaze_s1_dec(all_role_tokens, self.ln1(aggregated_src), memory_key_padding_mask=mask, pos=pos_embed, query_pos=role_tgt)
+        extracted_rhs = self.gaze_s1_dec(all_role_tokens, self.ln1(proj_object_features), memory_key_padding_mask=None, pos=proj_object_pos_embed, query_pos=role_tgt)
+        #extracted_rhs = self.gaze_s1_dec(all_role_tokens, self.ln1(aggregated_src), memory_key_padding_mask=None, pos=pos_embed, query_pos=role_tgt)
         extracted_rhs = extracted_rhs.transpose(1, 2)
         ## Encoder
         NUM_ALL_ROLES = 190
@@ -140,7 +153,7 @@ class Transformer(nn.Module):
         frame_role_queries = selected_role_tokens + selected_verb_token
         frame_role_queries = frame_role_queries.unsqueeze(1).repeat(1, bs, 1)
         role_tgt = torch.zeros_like(frame_role_queries)
-        final_rhs = self.gaze_s2_dec(frame_role_queries, self.ln3(aggregated_src), memory_key_padding_mask=mask, pos=pos_embed, query_pos=role_tgt)
+        final_rhs = self.gaze_s2_dec(frame_role_queries, self.ln3(aggregated_src), memory_key_padding_mask=None, pos=proj_object_pos_embed, query_pos=role_tgt)
         final_rhs = self.ln4(final_rhs)
         final_rhs = final_rhs.transpose(1,2)
 
