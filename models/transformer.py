@@ -47,7 +47,7 @@ class Transformer(nn.Module):
         #                                      nn.Linear(d_model*2, self.num_verb_classes))
 
         #TODO
-        self.d_clip = 512
+        self.d_clip = 768
         self.project_clip = nn.Linear(self.d_clip, d_model)
 
         self.verb_classifier_clip = nn.Sequential(nn.Linear(d_model*3, d_model*3),

@@ -152,7 +152,7 @@ class CSVDataset(Dataset):
 
     #TODO
     def load_clip(self, image_index):
-        clip_folder = 'clip_features_ViT_B32'
+        clip_folder = 'clip_features_ViT_L14_336px'
         img_file = f"{clip_folder}/"+self.image_names[image_index][len(self.img_folder):-3]+'npy'
         return np.load(img_file)
 
